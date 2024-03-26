@@ -6,9 +6,15 @@ import (
 	"os"
   "io"
   "strings"
+  "time"
 )
 
-var m =make(map[string]string)
+type Item struct {
+	Value  string
+	Expiry time.Time
+}
+
+var m = make(map[string]Item)
 
 func main() {
 	
@@ -47,7 +53,7 @@ func handleConn(conn net.Conn){
     _, err = conn.Write([]byte(res))
   }
 }
-func parseCommand(req string)(string,[]string,map[string]string){
+func parseCommand(req string)(string,[]string,map[string]Item){
   tokens:= strings.Split(req,"\r\n")
   tokens = tokens[1:]
   cmd := tokens[1]
@@ -62,17 +68,29 @@ func parseCommand(req string)(string,[]string,map[string]string){
   return cmd,args,m
 }
 
-func processCommands(cmd string, arg []string,m map[string]string) string{
+func processCommands(cmd string, arg []string,m map[string]Item) string{
   cmd = strings.ToLower(cmd)
     if cmd == "ping" {
         return "+PONG\r\n"
     } else if cmd == "echo" {
         return "+" + arg[0] + "\r\n"
     } else if cmd == "set" {
-        m[arg[0]]= arg[1]
+      if strings.ToLower(arg[2])!="px" {
+        m[arg[0]] = Item{Value: arg[1]}
         return "+OK\r\n"
+      } 
+      if strings.ToLower(arg[2])== "px" {
+        duration,_ := time.ParseDuration(arg[3]+"ms")
+        m[arg[0]]= Item{Value: arg[1],Expiry: time.Now().Add(duration)}
+        return "+OK\r\n"
+      } 
     } else if cmd == "get" {
-        return "+"+m[arg[0]]+"\r\n"
+      if val,ok:=m[arg[0]];ok {
+        if val.Expiry.IsZero() || val.Expiry.After(time.Now()){
+          return "$"+fmt.Sprint(len(val.Value))+"\r\n"+ val.Value+"\r\n"
+        }
+        delete(m,arg[0])
+      }
     }
-    return ""
+    return "$-1\r\n"
 }
