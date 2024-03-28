@@ -13,15 +13,43 @@ type Item struct {
 	Value  string
 	Expiry time.Time
 }
-
+type RedisConfig struct{
+  Role string
+  Master_rep_ID string
+  Master_Offset int
+}
+var config RedisConfig
 var m = make(map[string]Item)
 
 func main() {
 	
 	fmt.Println("Logs from your program will appear here!")
-	 l, err := net.Listen("tcp", "0.0.0.0:6379")
+   var portNumber string 
+   var argArray []string
+   argArray = os.Args[1:]
+   portNumber = "6379"
+   config.Role = "master"
+   config.Master_Offset=0
+   config.Master_rep_ID = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"
+   if len(argArray)>=2{
+     if argArray[0]=="--port"{
+       portNumber = argArray[1]
+     }
+     if len(argArray)>2 {
+       if argArray[2]=="--replicaof" {
+          config.Role = "slave"
+       }
+     }
+
+   }
+   //if len(argArray)>2{
+     //if argArray[2]=="--replicaof"{
+       //config.Role ="slave"
+     //}
+   //}
+	 l, err := net.Listen("tcp", "0.0.0.0:"+portNumber)
 	 if err != nil {
-	 	fmt.Println("Failed to bind to port 6379")
+	 	fmt.Println("Failed to bind to port "+portNumber)
 	 	os.Exit(1)
 	}
   for{ // infinite loop which accepts multiple connections 
@@ -47,7 +75,7 @@ func handleConn(conn net.Conn){
       return
     }
     cmd,args,maps := parseCommand(string(buf))// the input given here has to be in the form of RESP which is a protocol used by Redis
-    res := processCommands(cmd,args,maps)
+    res := processCommands(cmd,args,maps,config)
     fmt.Println(res)
     fmt.Println(maps)
     _, err = conn.Write([]byte(res))
@@ -68,7 +96,7 @@ func parseCommand(req string)(string,[]string,map[string]Item){
   return cmd,args,m
 }
 
-func processCommands(cmd string, arg []string,m map[string]Item) string{
+func processCommands(cmd string, arg []string,m map[string]Item,config RedisConfig) string{
   cmd = strings.ToLower(cmd)
     if cmd == "ping" {
         return "+PONG\r\n"
@@ -91,6 +119,14 @@ func processCommands(cmd string, arg []string,m map[string]Item) string{
         }
         delete(m,arg[0])
       }
+    } else if strings.ToUpper(cmd) == "INFO" {
+        if arg[0]=="replication" {
+          role := fmt.Sprintf("\r\nrole:%s", config.Role)
+          mas_rep_ID := "\r\n"+"master_replid:"+config.Master_rep_ID
+          mas_offset := "\r\n"+"master_repl_offset:"+fmt.Sprint(config.Master_Offset)
+          res :=  role+mas_rep_ID+mas_offset
+          return "$"+fmt.Sprint(len(res))+"\r\n"+res+"\r\n"
+        }
     }
     return "$-1\r\n"
 }
