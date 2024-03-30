@@ -13,10 +13,16 @@ type Item struct {
 	Value  string
 	Expiry time.Time
 }
+type ReplicaConfig struct{
+  MasterPort string
+  MasterHostname string
+
+}
 type RedisConfig struct{
   Role string
   Master_rep_ID string
   Master_Offset int
+  ReplicaCon ReplicaConfig
 }
 var config RedisConfig
 var m = make(map[string]Item)
@@ -38,22 +44,23 @@ func main() {
      if len(argArray)>2 {
        if argArray[2]=="--replicaof" {
           config.Role = "slave"
+          config.ReplicaCon.MasterPort = argArray[4]
+          config.ReplicaCon.MasterHostname = argArray[3]
+
        }
      }
 
    }
-   //if len(argArray)>2{
-     //if argArray[2]=="--replicaof"{
-       //config.Role ="slave"
-     //}
-   //}
 	 l, err := net.Listen("tcp", "0.0.0.0:"+portNumber)
 	 if err != nil {
 	 	fmt.Println("Failed to bind to port "+portNumber)
 	 	os.Exit(1)
 	}
+  if config.Role == "slave"{
+    handleHandShaketoMaster()
+  }
   for{ // infinite loop which accepts multiple connections 
-  conn, err := l.Accept()
+  conn, err := l.Accept()// connect to the server using redis-cli client 
 	 if err != nil {
 	 	fmt.Println("Error accepting connection: ", err.Error())
 	 	os.Exit(1)
@@ -89,13 +96,44 @@ func parseCommand(req string)(string,[]string,map[string]Item){
   tokens = tokens[2:]
   var args []string
   for _, token := range tokens{
-    if !strings.HasPrefix(token,"$"){
+    if !strings.HasPrefix(token,"$") && !strings.HasPrefix(token,"*"){
       args = append(args,token)
     }
   }
   return cmd,args,m
 }
+func handleHandShaketoMaster(){
+  addr := config.ReplicaCon.MasterHostname + ":"+ config.ReplicaCon.MasterPort
 
+  conn, err := net.Dial("tcp",addr)
+  if err!=nil{
+    panic(err.Error())
+  }
+  //defer conn.Close()
+
+  _, err = conn.Write([]byte("*1\r\n$4\r\nping\r\n"))
+  if err!=nil{
+    panic(err)
+  }
+  data:= make([]byte,1024)
+  d , err:= conn.Read(data)
+  if err!=nil{
+    panic(err.Error)
+  }
+  // sending REPLCONF
+  _, err = conn.Write([]byte("*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n$4\r\n6380\r\n"))
+  if err!=nil{
+    panic(err)
+  }
+  _ , err = conn.Write([]byte("*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n"))
+  if err!=nil{
+    panic(err)
+  }
+  res:= data[:d]
+  fmt.Println(res)
+
+
+}
 func processCommands(cmd string, arg []string,m map[string]Item,config RedisConfig) string{
   cmd = strings.ToLower(cmd)
     if cmd == "ping" {
@@ -127,6 +165,22 @@ func processCommands(cmd string, arg []string,m map[string]Item,config RedisConf
           res :=  role+mas_rep_ID+mas_offset
           return "$"+fmt.Sprint(len(res))+"\r\n"+res+"\r\n"
         }
+    } else if cmd == "replconf" {
+        if arg[0] == "listening-port" {
+          // check if the resp is valid
+          return "+OK\r\n"
+        }
+        if arg[0] == "capa" {
+          //check if the resp is valid
+          return "+OK\r\n"
+        }
     }
     return "$-1\r\n"
+}
+func toRespArrays(arr []string) string {
+	res := fmt.Sprintf("*%d\r\n", len(arr))
+	//for _, element := range arr {
+		// add elements in RESP format
+	//}
+	return res
 }
