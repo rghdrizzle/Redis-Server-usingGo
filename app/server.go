@@ -109,30 +109,27 @@ func handleHandShaketoMaster(){
   if err!=nil{
     panic(err.Error())
   }
-  //defer conn.Close()
+  defer conn.Close()
 
-  _, err = conn.Write([]byte("*1\r\n$4\r\nping\r\n"))
+  sendCommand("*1\r\n$4\r\nping\r\n",conn)
+  sendCommand("*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n$4\r\n6380\r\n",conn)
+  sendCommand("*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n",conn)
+  sendCommand("*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n",conn)
+
+
+}
+func sendCommand(req string, conn net.Conn){
+  _, err := conn.Write([]byte(req))
   if err!=nil{
     panic(err)
   }
-  data:= make([]byte,1024)
-  d , err:= conn.Read(data)
-  if err!=nil{
-    panic(err.Error)
+  buf := make([]byte, 1024)
+	n, err := conn.Read(buf)
+	if err != nil {
+		fmt.Println("Error reading from connection: ", err.Error())
+		os.Exit(1)
   }
-  // sending REPLCONF
-  _, err = conn.Write([]byte("*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n$4\r\n6380\r\n"))
-  if err!=nil{
-    panic(err)
-  }
-  _ , err = conn.Write([]byte("*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n"))
-  if err!=nil{
-    panic(err)
-  }
-  res:= data[:d]
-  fmt.Println(res)
-
-
+  fmt.Println(n)
 }
 func processCommands(cmd string, arg []string,m map[string]Item,config RedisConfig) string{
   cmd = strings.ToLower(cmd)
@@ -174,6 +171,9 @@ func processCommands(cmd string, arg []string,m map[string]Item,config RedisConf
           //check if the resp is valid
           return "+OK\r\n"
         }
+    } else if cmd == "psync" {
+        msg:= "+FULLRESYNC"+" "+config.Master_rep_ID+" "+fmt.Sprint(config.Master_Offset)+"\r\n"
+        return msg
     }
     return "$-1\r\n"
 }
