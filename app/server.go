@@ -72,6 +72,8 @@ func main() {
 			fmt.Println("Error accepting connection: ", err.Error())
 			os.Exit(1)
 		}
+
+    
 		go handleConn(conn) // a go routine which is responsible to handle for a particular connection
 	}
 }
@@ -128,14 +130,31 @@ func handleHandShaketoMaster() {
 	if err != nil {
 		panic(err.Error())
 	}
-	defer conn.Close()
-
+  defer conn.Close()
 	sendCommand("*1\r\n$4\r\nping\r\n", conn)
 	sendCommand("*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n$4\r\n6380\r\n", conn)
 	sendCommand("*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n", conn)
 	sendCommand("*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n", conn)
 	//replica = conn
+  handlePropagatedCommands(conn)
 
+}
+func handlePropagatedCommands(conn net.Conn){
+  defer conn.Close()
+  for {
+		buf := make([]byte, 1024)
+		_, err := conn.Read(buf)
+		if err != nil {
+			conn.Write([]byte("-ERROR\r\n"))
+			return
+		}
+		if err == io.EOF { // if client didnt send anything then return.
+			return
+		}
+		cmd, args, maps := parseCommand(string(buf)) // the input given here has to be in the form of RESP which is a protocol used by Redis
+		res := processCommands(cmd, args, maps, config)
+    fmt.Println(res)
+}
 }
 func sendCommand(req string, conn net.Conn) {
 	_, err := conn.Write([]byte(req))
@@ -152,6 +171,11 @@ func sendCommand(req string, conn net.Conn) {
 }
 func processCommands(cmd string, arg []string, m map[string]Item, config RedisConfig) string {
 	cmd = strings.ToLower(cmd)
+  if config.Role == "slave"{
+    fmt.Println("Slave is running now ")
+    fmt.Println(cmd)
+
+  }
 	if cmd == "ping" {
 		return "+PONG\r\n"
 	} else if cmd == "echo" {
@@ -193,7 +217,7 @@ func processCommands(cmd string, arg []string, m map[string]Item, config RedisCo
 		}
 	} else if cmd == "psync" {
 		msg := "+FULLRESYNC" + " " + config.Master_rep_ID + " " + fmt.Sprint(config.Master_Offset) + "\r\n"
-		return msg
+    	return msg
 	}
 	return "$-1\r\n"
 }
@@ -206,13 +230,12 @@ func toRespArrays(arr []string) string {
 	return res
 }
 func sendToSlave(cmd string, key string, value string) {
-	if replica != nil {
+	if replica != nil && config.Role=="master"{
 		for _, slave := range replica {
 			_, err := slave.Write([]byte(toRespArrays([]string{cmd, key, value})))
 			if err != nil {
 				panic(err)
 			}
-
 		}
 	}
 }
