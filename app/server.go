@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"time"
+  	"reflect"
 )
 
 type Item struct {
@@ -130,17 +131,16 @@ func handleHandShaketoMaster() {
 	if err != nil {
 		panic(err.Error())
 	}
-  defer conn.Close()
 	sendCommand("*1\r\n$4\r\nping\r\n", conn)
 	sendCommand("*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n$4\r\n6380\r\n", conn)
 	sendCommand("*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n", conn)
 	sendCommand("*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n", conn)
 	//replica = conn
-  handlePropagatedCommands(conn)
+  go handlePropagatedCommands(conn)
 
 }
 func handlePropagatedCommands(conn net.Conn){
-  defer conn.Close()
+	defer conn.Close()
   for {
 		buf := make([]byte, 1024)
 		_, err := conn.Read(buf)
@@ -218,7 +218,16 @@ func processCommands(cmd string, arg []string, m map[string]Item, config RedisCo
 	} else if cmd == "psync" {
 		msg := "+FULLRESYNC" + " " + config.Master_rep_ID + " " + fmt.Sprint(config.Master_Offset) + "\r\n"
     	return msg
-	}
+	} else if cmd == "type" {
+    val, ok := m[arg[0]]
+    if ok{
+      typeOfVariable := reflect.TypeOf(val.Value)
+	  res := fmt.Sprintf("+%s\r\n",typeOfVariable)
+      return res
+    }
+    
+      return "+none\r\n"
+  }
 	return "$-1\r\n"
 }
 func toRespArrays(arr []string) string {
