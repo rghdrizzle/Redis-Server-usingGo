@@ -15,11 +15,16 @@ type Item struct {
 	Value  string
 	Expiry time.Time
 }
+type Entry struct{
+  Entry_id string
+  Entries  []string
+}
 type ReplicaConfig struct {
 	MasterPort     string
 	MasterHostname string
 	SlavePort      string
 	SlaveAddr      string
+  MasterConn     net.Conn
 }
 type RedisConfig struct {
 	Role          string
@@ -30,6 +35,7 @@ type RedisConfig struct {
 
 var config RedisConfig
 var m = make(map[string]Item)
+var entries []Entry 
 
 const emptyRDBcontent = "524544495330303131fa0972656469732d76657205372e322e30fa0a72656469732d62697473c040fa056374696d65c26d08bc65fa08757365642d6d656dc2b0c41000fa08616f662d62617365c000fff06e3bfec0ff5aa2" // hex
 var replica []net.Conn = []net.Conn{}
@@ -66,6 +72,9 @@ func main() {
 	}
 	if config.Role == "slave" {
 		handleHandShaketoMaster()
+    fmt.Println("Handshake successfull")
+    //go handlePropagatedCommands(config.ReplicaCon.MasterConn)
+
 	}
 	for { // infinite loop which accepts multiple connections
 		conn, err := l.Accept() // connect to the server using redis-cli client
@@ -75,8 +84,9 @@ func main() {
 		}
 
     
-		go handleConn(conn) // a go routine which is responsible to handle for a particular connection
+	go handleConn(conn) // a go routine which is responsible to handle for a particular connection
 	}
+
 }
 
 func handleConn(conn net.Conn) {
@@ -126,24 +136,28 @@ func parseCommand(req string) (string, []string, map[string]Item) {
 }
 func handleHandShaketoMaster() {
 	addr := config.ReplicaCon.MasterHostname + ":" + config.ReplicaCon.MasterPort
-
+    
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
 		panic(err.Error())
-	}
+	} 
+//defer conn.Close()
 	sendCommand("*1\r\n$4\r\nping\r\n", conn)
 	sendCommand("*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n$4\r\n6380\r\n", conn)
 	sendCommand("*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n", conn)
 	sendCommand("*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n", conn)
 	//replica = conn
   go handlePropagatedCommands(conn)
+  config.ReplicaCon.MasterConn = conn
 
 }
 func handlePropagatedCommands(conn net.Conn){
-	defer conn.Close()
+  defer conn.Close()
   for {
 		buf := make([]byte, 1024)
 		_, err := conn.Read(buf)
+    fmt.Println(strings.Split(string(buf),"*"))
+    fmt.Println("test1"+string(buf))
 		if err != nil {
 			conn.Write([]byte("-ERROR\r\n"))
 			return
@@ -151,13 +165,14 @@ func handlePropagatedCommands(conn net.Conn){
 		if err == io.EOF { // if client didnt send anything then return.
 			return
 		}
+    fmt.Println(string(buf))
 		cmd, args, maps := parseCommand(string(buf)) // the input given here has to be in the form of RESP which is a protocol used by Redis
 		res := processCommands(cmd, args, maps, config)
     fmt.Println(res)
 }
 }
 func sendCommand(req string, conn net.Conn) {
-	_, err := conn.Write([]byte(req))
+	 _, err := conn.Write([]byte(req))
 	if err != nil {
 		panic(err)
 	}
@@ -227,7 +242,14 @@ func processCommands(cmd string, arg []string, m map[string]Item, config RedisCo
     }
     
       return "+none\r\n"
-  }
+
+    } else if cmd == "xadd"{
+      if arg[0]=="stream_key"{
+        //entry_id := arg[1]
+
+
+      }
+    }
 	return "$-1\r\n"
 }
 func toRespArrays(arr []string) string {
@@ -242,9 +264,10 @@ func sendToSlave(cmd string, key string, value string) {
 	if replica != nil && config.Role=="master"{
 		for _, slave := range replica {
 			_, err := slave.Write([]byte(toRespArrays([]string{cmd, key, value})))
-			if err != nil {
+      fmt.Println("Command sent: "+toRespArrays([]string{cmd, key, value}))
+      if err != nil {
 				panic(err)
-			}
+      }   
 		}
 	}
 }
