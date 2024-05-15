@@ -17,7 +17,7 @@ type Item struct {
 }
 type Entry struct{
   Entry_id string
-  Entries  []string
+  Entries  map[string]string
 }
 type ReplicaConfig struct {
 	MasterPort     string
@@ -240,15 +240,23 @@ func processCommands(cmd string, arg []string, m map[string]Item, config RedisCo
 	  res := fmt.Sprintf("+%s\r\n",typeOfVariable)
       return res
     }
+    for i,_ := range len(entries){
+      val,ok = entries[i].Entries[arg[0]]
+      if ok{
+        res := fmt.Sprintf("+Stream\r\n")
+        return res
+      }
+    }
     
       return "+none\r\n"
 
     } else if cmd == "xadd"{
-      if arg[0]=="stream_key"{
-        //entry_id := arg[1]
-
-
+      for i=3 ; i<len(arg);i+=2{
+        entries[len(entries)-1].Entry_id = arg[2]
+        entries[len(entries)-1].Entries[arg[i]]=arg[i+1]
       }
+      
+      return "$"+fmt.Sprint(len(arg[1]))+"\r\n"+arg[1]+"\r\n"
     }
 	return "$-1\r\n"
 }
