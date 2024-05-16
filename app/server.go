@@ -16,6 +16,7 @@ type Item struct {
 	Expiry time.Time
 }
 type Entry struct{
+  Stream_key string
   Entry_id string
   Entries  map[string]string
 }
@@ -240,22 +241,33 @@ func processCommands(cmd string, arg []string, m map[string]Item, config RedisCo
 	  res := fmt.Sprintf("+%s\r\n",typeOfVariable)
       return res
     }
-    for i,_ := range len(entries){
-      val,ok = entries[i].Entries[arg[0]]
-      if ok{
-        res := fmt.Sprintf("+Stream\r\n")
-        return res
-      }
-    }
+   for i:=0;i<len(entries);i++{
+    checkExist := entries[i].Stream_key
+    if arg[0]==checkExist {
+     res := fmt.Sprintf("+stream\r\n")
+     return res
+     }
+   }
     
       return "+none\r\n"
 
     } else if cmd == "xadd"{
-      for i=3 ; i<len(arg);i+=2{
-        entries[len(entries)-1].Entry_id = arg[2]
-        entries[len(entries)-1].Entries[arg[i]]=arg[i+1]
-      }
-      
+        entriesMap := make(map[string]string)
+        for i:=2;i<len(arg)-1;i+=2{
+          key := arg[i]
+          value:= arg[i+1]
+          entriesMap[key]=value
+          fmt.Println("key:"+key)
+          fmt.Println("value:"+value)
+        }
+        new_entry := Entry{
+          Stream_key: arg[0],
+          Entry_id: arg[1],
+          Entries: entriesMap,
+        }
+
+		entries = append(entries,new_entry)
+    fmt.Println(entries)  
       return "$"+fmt.Sprint(len(arg[1]))+"\r\n"+arg[1]+"\r\n"
     }
 	return "$-1\r\n"
@@ -278,4 +290,4 @@ func sendToSlave(cmd string, key string, value string) {
       }   
 		}
 	}
-}
+ }
