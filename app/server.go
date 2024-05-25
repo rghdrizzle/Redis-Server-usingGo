@@ -8,7 +8,8 @@ import (
 	"os"
 	"strings"
 	"time"
-  	"reflect"
+  "reflect"
+  "strconv"
 )
 
 type Item struct {
@@ -253,6 +254,50 @@ func processCommands(cmd string, arg []string, m map[string]Item, config RedisCo
 
     } else if cmd == "xadd"{
         entriesMap := make(map[string]string)
+        checkCurrentId := strings.Split(arg[1],"-")
+        currentTime := checkCurrentId[0]
+        currentSeqNo := checkCurrentId[1]
+        if currentTime == "0" && currentSeqNo=="*"{
+            arg[1]="0-1"
+          }
+         if currentSeqNo =="*"{
+            if len(entries)==0{
+              arg[1]=currentTime+"-1"
+            }
+          }
+        if len(entries)!=0{
+          idCheck := entries[len(entries)-1].Entry_id
+          checkString:= strings.Split(idCheck,"-")
+          previousTime := checkString[0]
+          previousSeqNo := checkString[1]
+         // checkCurrentId := strings.Split(arg[1],"-")
+         // currentTime := checkCurrentId[0]
+         // currentSeqNo := checkCurrentId[1]
+          if arg[1]=="0-0"{
+          return "-ERR The ID specified in XADD must be greater than 0-0\r\n"
+          }
+         // if currentTime == "0" && currentSeqNo=="*"{
+         //   arg[1]="0-1"
+        //  }
+          if currentSeqNo =="*"{
+            if idCheck =="0-1"{
+            newSeq := fmt.Sprintf("%d",0)
+            arg[1]=currentTime+"-"+newSeq
+
+            }else{
+            i,_ := strconv.Atoi(previousSeqNo)
+            newSeq := fmt.Sprintf("%d",i+1)
+            arg[1]=currentTime+"-"+newSeq
+            checkCurrentId = strings.Split(arg[1],"-")
+            currentSeqNo = checkCurrentId[1]
+          } 
+        }
+
+          if currentTime<previousTime || currentSeqNo<=previousSeqNo && idCheck !="0-1"{
+            return "-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n"
+          }
+
+        }
         for i:=2;i<len(arg)-1;i+=2{
           key := arg[i]
           value:= arg[i+1]
