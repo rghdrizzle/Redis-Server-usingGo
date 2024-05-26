@@ -123,17 +123,18 @@ func handleConn(conn net.Conn) {
 	}
 }
 func parseCommand(req string) (string, []string, map[string]Item) {
-	tokens := strings.Split(req, "\r\n")
+  tokens := strings.Split(req, "\r\n")
 	tokens = tokens[1:]
 	cmd := tokens[1]
 	fmt.Println(cmd)
 	tokens = tokens[2:]
 	var args []string
 	for _, token := range tokens {
-		if !strings.HasPrefix(token, "$") && !strings.HasPrefix(token, "*") {
+		if !strings.HasPrefix(token, "$") && !strings.HasPrefix(token, "*")|| token=="*"{
 			args = append(args, token)
 		}
 	}
+  fmt.Println(args)
 	return cmd, args, m
 }
 func handleHandShaketoMaster() {
@@ -254,6 +255,10 @@ func processCommands(cmd string, arg []string, m map[string]Item, config RedisCo
 
     } else if cmd == "xadd"{
         entriesMap := make(map[string]string)
+        fmt.Println("CHECKKK::"+arg[0]+" "+arg[1]+" "+arg[2])
+        if arg[1]=="*"{
+          arg[1]= fmt.Sprintf("%d-%d",time.Now().UnixMilli(),0)
+        }
         checkCurrentId := strings.Split(arg[1],"-")
         currentTime := checkCurrentId[0]
         currentSeqNo := checkCurrentId[1]
@@ -294,6 +299,7 @@ func processCommands(cmd string, arg []string, m map[string]Item, config RedisCo
         }
 
           if currentTime<previousTime || currentSeqNo<=previousSeqNo && idCheck !="0-1"{
+            fmt.Println("CHECK:::"+previousTime+" CHECKKK:::"+previousSeqNo)
             return "-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n"
           }
 
