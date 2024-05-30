@@ -320,8 +320,24 @@ func processCommands(cmd string, arg []string, m map[string]Item, config RedisCo
 		entries = append(entries,new_entry)
     fmt.Println(entries)  
       return "$"+fmt.Sprint(len(arg[1]))+"\r\n"+arg[1]+"\r\n"
+    } else if cmd == "xrange"{
+      start:= FindIndexInArray(arg[1],entries)
+	  end:= FindIndexInArray(arg[2],entries)
+	  for i:=start;i<=end;i++{
+		  fmt.Println(entries[i].Entry_id)
+		}
+    
+
     }
 	return "$-1\r\n"
+}
+func FindIndexInArray(element string,arr []Entry) int{
+  for p,v:= range arr{
+    if v.Entry_id == element{
+      return p
+    }
+  }
+  return -1
 }
 func toRespArrays(arr []string) string {
 	res := fmt.Sprintf("*%d\r\n", len(arr))
