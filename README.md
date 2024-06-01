@@ -1,6 +1,6 @@
 # Redis-using-go
+<img src="https://github.com/rghdrizzle/Redis-Server-usingGo/blob/main/pngwing.com%20(1).png"></img>
 ## Installation
-<img src="https://github.com/rghdrizzle/Redis-Server-usingGo/blob/main/pngwing.com%20(1).png">
 To install this redis-server, follow the steps below:
 
 ### Prerequisites
